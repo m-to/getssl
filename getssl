@@ -351,6 +351,7 @@ help_message() { # print out the help message
 	  -d, --debug     Outputs debug information
 	  -c, --create    Create default config files
 	  -f, --force     Force renewal of cert (overrides expiry checks)
+	  -p, --push      If existing local certificate is valid, copy to destination
 	  -a, --all       Check all certificates
 	  -q, --quiet     Quiet mode (only outputs on error, or succcess of new cert)
 	  -u, --upgrade   Upgrade getssl if a more recent version is available
@@ -519,7 +520,7 @@ urlbase64() { # urlbase64: base64 encoded string with '+' replaced with '-' and 
 }
 
 usage() { # program usage
-  echo "Usage: $PROGNAME [-h|--help] [-d|--debug] [-c|--create] [-f|--force] [-a|--all] [-q|--quiet] [-u|--upgrade] [-w working_dir] domain"
+  echo "Usage: $PROGNAME [-h|--help] [-d|--debug] [-c|--create] [-f|--force] [-p|--push] [-a|--all] [-q|--quiet] [-u|--upgrade] [-w working_dir] domain"
 }
 
 write_domain_template() { # write out a template file for a domain.
@@ -650,6 +651,8 @@ while [[ -n $1 ]]; do
      _USE_DEBUG=1 ;;
     -c | --create)
      _CREATE_CONFIG=1 ;;
+    -p | --push)
+     _DO_PUSH=1 ;;
     -f | --force)
      _FORCE_RENEW=1 ;;
     -a | --all)
@@ -880,7 +883,10 @@ if [ -f "$CERT_FILE" ]; then
   if [[ "$enddate" != "-" ]]; then
     if [[ $(os_date -d "${RENEW_ALLOW} days" +%s) -lt $(os_date -d "$enddate" +%s) ]]; then
       info "certificate for $DOMAIN is still valid for more than $RENEW_ALLOW days (until $enddate)"
-      # everything is OK, so exit.
+      # everything is OK, so either push files if requested or just exit.
+      if [ ${_DO_PUSH} -eq 1 ]; then
+        push_certs
+      fi
       graceful_exit
     else
       # certificate needs renewal, archive current cert and continue.
