@@ -425,6 +425,22 @@ reload_service() {  # Runs a command to reload services ( via ssh if needed)
   fi
 }
 
+push_certs() { # Copies all files to their destination and reloads.
+  # copy certs to the correct location (creating concatenated files as required)
+  copy_file_to_location "domain certificate" "$CERT_FILE" "$DOMAIN_CERT_LOCATION"
+  copy_file_to_location "private key" "$DOMAIN_DIR/${DOMAIN}.key" "$DOMAIN_KEY_LOCATION"
+  copy_file_to_location "CA certificate" "$CA_CERT" "$CA_CERT_LOCATION"
+  cat "$CERT_FILE" "$CA_CERT" > "$TEMP_DIR/${DOMAIN}_chain.pem"
+  copy_file_to_location "full pem" "$TEMP_DIR/${DOMAIN}_chain.pem"  "$DOMAIN_CHAIN_LOCATION"
+  cat "$DOMAIN_DIR/${DOMAIN}.key" "$CERT_FILE" > "$TEMP_DIR/${DOMAIN}_K_C.pem"
+  copy_file_to_location "private key and domain cert pem" "$TEMP_DIR/${DOMAIN}_k_C.pem"  "$DOMAIN_KEY_CERT_LOCATION"
+  cat "$DOMAIN_DIR/${DOMAIN}.key" "$CERT_FILE" "$CA_CERT" > "$TEMP_DIR/${DOMAIN}.pem"
+  copy_file_to_location "full pem" "$TEMP_DIR/${DOMAIN}.pem"  "$DOMAIN_PEM_LOCATION"
+
+  # Run reload command to restart apache / nginx or whatever system
+  reload_service
+}
+
 requires() { # check if required function is available
   result=$(which "$1" 2>/dev/null)
   debug "checking for required $1 ... $result"
@@ -834,16 +850,9 @@ if [[ "${CHECK_REMOTE}" == "true" ]] && [ $_FORCE_RENEW -eq 0 ]; then
             info "remote expires sooner than local ..... will attempt to upload from local"
             echo "$EX_CERT" > "$DOMAIN_DIR/${DOMAIN}.crt.remote"
             cert_archive "$DOMAIN_DIR/${DOMAIN}.crt.remote"
-            copy_file_to_location "domain certificate" "$CERT_FILE" "$DOMAIN_CERT_LOCATION"
-            copy_file_to_location "private key" "$DOMAIN_DIR/${DOMAIN}.key" "$DOMAIN_KEY_LOCATION"
-            copy_file_to_location "CA certificate" "$CA_CERT" "$CA_CERT_LOCATION"
-            cat "$CERT_FILE" "$CA_CERT" > "$TEMP_DIR/${DOMAIN}_chain.pem"
-            copy_file_to_location "full pem" "$TEMP_DIR/${DOMAIN}_chain.pem"  "$DOMAIN_CHAIN_LOCATION"
-            cat "$DOMAIN_DIR/${DOMAIN}.key" "$CERT_FILE" > "$TEMP_DIR/${DOMAIN}_K_C.pem"
-            copy_file_to_location "private key and domain cert pem" "$TEMP_DIR/${DOMAIN}_k_C.pem"  "$DOMAIN_KEY_CERT_LOCATION"
-            cat "$DOMAIN_DIR/${DOMAIN}.key" "$CERT_FILE" "$CA_CERT" > "$TEMP_DIR/${DOMAIN}.pem"
-            copy_file_to_location "full pem" "$TEMP_DIR/${DOMAIN}.pem"  "$DOMAIN_PEM_LOCATION"
-            reload_service
+
+            # Copy certificates to remote and reload services.
+            push_certs
           fi
         else
           info "Certificate on remote domain does not match domain, ignoring remote certificate"
@@ -1237,21 +1246,8 @@ if [ "$IssuerData" ] ; then
   info "The intermediate CA cert is in $CA_CERT"
 fi
 
-# copy certs to the correct location (creating concatenated files as required)
-
-copy_file_to_location "domain certificate" "$CERT_FILE" "$DOMAIN_CERT_LOCATION"
-copy_file_to_location "private key" "$DOMAIN_DIR/${DOMAIN}.key" "$DOMAIN_KEY_LOCATION"
-copy_file_to_location "CA certificate" "$CA_CERT" "$CA_CERT_LOCATION"
-cat "$CERT_FILE" "$CA_CERT" > "$TEMP_DIR/${DOMAIN}_chain.pem"
-copy_file_to_location "full pem" "$TEMP_DIR/${DOMAIN}_chain.pem"  "$DOMAIN_CHAIN_LOCATION"
-cat "$DOMAIN_DIR/${DOMAIN}.key" "$CERT_FILE" > "$TEMP_DIR/${DOMAIN}_K_C.pem"
-copy_file_to_location "private key and domain cert pem" "$TEMP_DIR/${DOMAIN}_K_C.pem"  "$DOMAIN_KEY_CERT_LOCATION"
-cat "$DOMAIN_DIR/${DOMAIN}.key" "$CERT_FILE" "$CA_CERT" > "$TEMP_DIR/${DOMAIN}.pem"
-copy_file_to_location "full pem" "$TEMP_DIR/${DOMAIN}.pem"  "$DOMAIN_PEM_LOCATION"
-
-# Run reload command to restart apache / nginx or whatever system
-
-reload_service
+# Copy certificates to remote and reload services.
+push_certs
 
 # Check if the certificate is installed correctly
 if [[ ${CHECK_REMOTE} == "true" ]]; then
